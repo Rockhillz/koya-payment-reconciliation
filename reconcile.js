@@ -2,17 +2,36 @@
 //
 // Reads payments.jsonl and works out how much money we actually collected.
 // Run:  node reconcile.js
+import fs from "fs";
 
-const fs = require("fs");
+function parseAmount(raw) {
+  if (typeof raw === "number") return raw;
+  if (typeof raw === "string") return Number(raw.replace(/[,\s]/g, ""));
+  return NaN;
+}
+
+const latest = new Map();
+
+for (const line of fs.readFileSync("payments.jsonl", "utf8").split("\n")) {
+  if (line.trim() === "") continue;
+  let event;
+  try {
+    event = JSON.parse(line);
+  } catch {
+    continue;
+  }
+  if (event === null || typeof event !== "object") continue;
+  if (typeof event.txn_id !== "string" || event.txn_id === "") continue;
+
+  const prev = latest.get(event.txn_id);
+  if (!prev || String(event.ts) >= String(prev.ts)) latest.set(event.txn_id, event);
+}
 
 let total = 0;
 let count = 0;
-
-const lines = fs.readFileSync("payments.jsonl", "utf8").split("\n").filter((l) => l.length > 0);
-for (const line of lines) {
-  const event = JSON.parse(line);
+for (const event of latest.values()) {
   if (event.status === "success") {
-    total += Number(event.amount);
+    total += parseAmount(event.amount);
     count += 1;
   }
 }
